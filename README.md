@@ -1,60 +1,80 @@
 # Nugget Artifact Evaluation (AE)
 
-This document describes how to set up the environment required to reproduce the steps in Nugget.
+This document describes how to set up the environment required to reproduce the experiments in the Nugget paper.
 
-Throughout this document, we use:
+Throughout this document:
 
-- `[project dir]`: the root directory of the cloned Nugget repository.
-- `papi install prefix`: the directory where PAPI is installed by the helper scripts.
+- `[project dir]` is the root directory of the cloned Nugget repository.
+- `[papi install prefix]` is the directory where PAPI is installed by the helper scripts.
+
+---
 
 ## Reproducing Paper Experiments
 
-For easy reproducing, we offer auto scripts for each step.
-We expect the Docker image to be used for better environment control.
-In our actual experiments, we ensured to minimize the noises in our measurement by using tools such as `cpuutils` and controlling the system such as fixing the CPU frequency.
-Such things are hard to write an auto scripts to do because different systems might have different versions of the tools and might require different permissions.
-Therefore, in the reproducing scripts, we do not enforce such operations to limit the noises in the measurements.
+To make reproduction easier, we provide scripts that automate each step.  
+We strongly recommend using the Docker image to control the environment.
 
-First, build the Docker image:
+In our own experiments, we minimized measurement noise using tools such as `cpuutils`, fixing CPU frequency, and other system-level settings. These are **not** enforced in the AE scripts because they tend to be machine-specific (different tool versions, permissions, etc.). As a result, your reproduced measurements may be noisier than the ones reported in the paper.
+
+### 0. Build and Run the Docker Image
+
+From the project root:
 
 ```bash
 cd Docker
 make image
-make NUM_CORES_TO_USE=[the max number of cores you want the container to use] WORKDIR=$PWD/.. run
-```
+make NUM_CORES_TO_USE=[max number of cores for the container] WORKDIR=$PWD/.. run
+````
 
-Because building LLVM can take have a big memory usage so setting the `NUM_CORES_TO_USE` to `$(nproc)` might not be ideal depending on the system you use.
-You can read the `/Docker/Makefile` to see details of how the Docker image and container are built.
+Notes:
 
-After getting into the Docker container with the project directory mounted as the workdir, run:
+* Building LLVM uses a lot of memory. Setting `NUM_CORES_TO_USE=$(nproc)` may not be appropriate on all systems. Choose a value that your machine can handle.
+* See `Docker/Makefile` for details on how the image and container are built.
+
+Once inside the Docker container (with the project directory mounted as the working directory), run:
 
 ```bash
 chmod +x install.sh
 ./install.sh
 ```
 
-At the end, the script will output the environment variables that you should set.
-You can set it up by copy, paste, and run in your terminal.
+At the end, the script prints a set of environment variable exports.
+Copy-paste these into your shell (or add them to your shell startup file) before running the experiments.
 
-### Preparation and Interval Analysis
+---
 
-#### NPB
+### 1. Preparation and Interval Analysis
+
+#### 1.1 NPB
+
+Run the preparation and interval analysis for NPB:
 
 ```bash
 cd nugget-protocol-NPB
-python3 ae-scripts/preparation_and_interval_analysis.py -d [project directory]
+python3 ae-scripts/preparation_and_interval_analysis.py -d [project dir]
 ```
-By default, it runs input class A with 4 threads.
-It allows you to see the whole process quicker.
-You can change the input class and number of threads by passing the options:
+
+By default, this runs input class **A** with **4 threads** to allow you to see the full pipeline more quickly.
+
+You can change the input class and number of threads:
 
 ```bash
-python3 ae-scripts/preparation_and_interval_analysis.py -d [project directory] -s [input class, i.e. A,B,C...] -t [the number of threads]
+python3 ae-scripts/preparation_and_interval_analysis.py \
+    -d [project dir] \
+    -s [input class, e.g., A,B,C,...] \
+    -t [number of threads]
 ```
 
-At the end of it, you will find the analysis results including the time it takes for each analysis under the `nugget-protocol-NPB/ae-experiments/[the binary of the input class]/[number of threads]`.
+Outputs:
 
-For example:
+* Analysis results (including per-analysis runtime) are under:
+
+  ```text
+  nugget-protocol-NPB/ae-experiments/[binary for the input class]/[number of threads]
+  ```
+
+Example:
+
 ```terminal
 dev@99494d3119ed:/workdir/nugget-protocol-NPB/ae-experiments/analysis$ ls
 ir_bb_analysis_exe_bt_A  ir_bb_analysis_exe_ep_A  ir_bb_analysis_exe_is_A  ir_bb_analysis_exe_mg_A
@@ -62,74 +82,117 @@ ir_bb_analysis_exe_cg_A  ir_bb_analysis_exe_ft_A  ir_bb_analysis_exe_lu_A  ir_bb
 dev@99494d3119ed:/workdir/nugget-protocol-NPB/ae-experiments/analysis$ ls ir_bb_analysis_exe_bt_A/
 threads-4
 dev@99494d3119ed:/workdir/nugget-protocol-NPB/ae-experiments/analysis$ ls ir_bb_analysis_exe_bt_A/threads-4/
-execution_time.txt  stderr.log  stdout.log analysis-output.csv
+execution_time.txt  stderr.log  stdout.log  analysis-output.csv
 ```
 
-The `analysis-output.csv` contains the LLVM IR BBV and the CSV information talked in the paper.
-The `execution_time.txt` contains the time it takes for this analysis to finish.
+* `analysis-output.csv` contains the LLVM IR basic-block vectors and CSV information referenced in the paper.
+* `execution_time.txt` contains the runtime of the analysis itself.
 
-### Sample Selection
+---
 
-Run k-means and optional random sampling to pick representative regions per benchmark and generate markers:
+### 2. Sample Selection
+
+Run k-means (and optional random sampling) to pick representative regions per benchmark and generate markers:
 
 ```bash
 cd nugget-protocol-NPB
-python3 ae-scripts/sample_selection.py -d [project dir] -s [input class] -b "CG EP" -t [threads] --k [num_clusters]
+python3 ae-scripts/sample_selection.py \
+    -d [project dir] \
+    -s [input class] \
+    -b "CG EP" \
+    -t [threads] \
+    --k [num_clusters]
 ```
 
-Example:
+Minimal example (uses defaults for size, benchmarks, etc.):
 
 ```bash
 python3 ae-scripts/sample_selection.py -d [project dir]
 ```
 
-The outputs are under the `ae-experiments` directory. 
+Outputs are written under:
 
-### Nugget Creation and Sample Validation
+```text
+nugget-protocol-NPB/ae-experiments
+```
 
-Build nugget and naive binaries for the selected regions, run them, and emit measurement/prediction CSVs:
+---
+
+### 3. Nugget Creation and Sample Validation
+
+Build Nugget and naive binaries for the selected regions, run them, and emit measurement/prediction CSVs:
 
 ```bash
 cd nugget-protocol-NPB
-python3 ae-scripts/nugget_creation_and_validaton.py -d [project dir] -s [input class] -b "CG EP" -t [threads] --grace-perc 0.98
+python3 ae-scripts/nugget_creation_and_validaton.py \
+    -d [project dir] \
+    -s [input class] \
+    -b "CG EP" \
+    -t [threads] \
+    --grace-perc 0.98
 ```
 
-What happens:
-- Configures and builds nugget and naive targets (using the selections/markers produced above).
-- Runs naive binaries to record baselines, then runs each nugget binary (handles nested executable paths).
-- Aggregates runtimes into `ae-experiments/nugget-measurement/measurements.csv`.
-- Computes program-level predicted runtime using k-means cluster weights and writes prediction errors (k-means and random) to `ae-experiments/nugget-measurement/prediction-error.csv`.
+What this script does:
+
+* Configures and builds Nugget and naive targets using the selections/markers from the previous step.
+
+* Runs naive binaries to record baseline runtimes, then runs each Nugget binary (handling nested executable paths).
+
+* Aggregates runtimes into:
+
+  ```text
+  ae-experiments/nugget-measurement/measurements.csv
+  ```
+
+* Computes program-level predicted runtimes using k-means cluster weights and writes prediction errors (k-means and random) to:
+
+  ```text
+  ae-experiments/nugget-measurement/prediction-error.csv
+  ```
 
 Key options:
-- `-s/--size`: input class (A/B/C...).
-- `-b/--benchmarks`: space/comma/semicolon separated list, e.g., `"CG EP"`.
-- `-t/--threads`: threads for the runs.
-- `--grace-perc`: grace percentage used in marker generation (matches sample selection step).
 
-### gem5 simulation
+* `-s/--size` – input class (A/B/C/…).
+* `-b/--benchmarks` – space/comma/semicolon-separated list, e.g. `"CG EP"` or `"CG,EP"`.
+* `-t/--threads` – number of threads.
+* `--grace-perc` – grace percentage used in marker generation; should match the value used in sample selection.
 
-Please see under the gem5-experiment directory.
+---
 
-## Preparation
+### 4. gem5 Simulation
+
+For gem5-based experiments, see the documentation under:
+
+```text
+[project dir]/gem5-experiment
+```
+
+---
+
+## Preparation (Environment and Dependencies)
 
 ### 1. Dependencies and Tools
 
-Make sure the following prerequisite is installed:
+Install the base prerequisites (inside the host or Docker, as appropriate):
 
 ```bash
 sudo apt install build-essential scons python3-dev git pre-commit zlib1g zlib1g-dev \
     libprotobuf-dev protobuf-compiler libprotoc-dev libgoogle-perftools-dev \
-    libboost-all-dev  libhdf5-serial-dev python3-pydot python3-venv python3-tk mypy \
+    libboost-all-dev libhdf5-serial-dev python3-pydot python3-venv python3-tk mypy \
     m4 libcapstone-dev libpng-dev libelf-dev pkg-config wget cmake doxygen clang-format \
     libncurses-dev
 ```
 
-Since Nugget measures using `perf`, so `perf` should be setup with correct permission in the system using for experiments.
+Nugget uses `perf` for measurements, so `perf` must be installed and configured with sufficient permissions on the system where you run experiments.
 
-We offer a Docker image that you can find in `/Docker` to have the above prerequisite installed.
-We also has an `install.sh` that helps to install the LLVM compiler and the PAPI tool.
+We provide:
 
-#### 1.1 LLVM with Nugget passes
+* A Docker image under `Docker/` that has the above dependencies preinstalled.
+* An `install.sh` script (at the project root) that installs the LLVM toolchain and PAPI.
+
+---
+
+### 1.1 LLVM with Nugget Passes
 
 This builds LLVM with the Nugget analysis and transformation passes.
 
@@ -138,34 +201,42 @@ cd [project dir]/llvm-project
 ./build_cmd.sh [llvm install prefix]
 ```
 
-* Replace `[llvm install prefix]` with the directory where you want LLVM to be installed.
-* After this step, your Nugget-enabled `clang`/`opt` etc. will live under that install prefix.
+* Replace `[llvm install prefix]` with the directory where you want LLVM installed.
+* After this step, Nugget-enabled `clang`, `opt`, etc. reside under that install prefix (e.g., `[llvm install prefix]/bin`).
 
-##### 1.1.1 Find the supported features 
+#### 1.1.1 Detect Supported CPU Features
 
-Different machine supports different features with LLVM backend, running this script helps to find out automatically.
+Different machines support different feature sets in the LLVM backend. The following script discovers them automatically:
 
 ```bash
 cd [project dir]/nugget_util/cmake/check-cpu-features
-LLVM_BIN=[llvm install prefix]/bin LLVM_LIB=[llvm install prefix]/lib LLVM_INCLUDE=[llvm install prefix]/include make
+LLVM_BIN=[llvm install prefix]/bin \
+LLVM_LIB=[llvm install prefix]/lib \
+LLVM_INCLUDE=[llvm install prefix]/include \
+    make
 ./check-cpu-features
 ```
 
-The reason why we separated `LLVM_BIN`, `LLVM_LIB`, and `LLVM_INCLUDE` is when using package LLVM, these three can be at different directories.
-For example, `/usr/bin`, `/usr/lib/llvm-19/lib`, and `/usr/include/llvm-19/llvm`.
+We separate `LLVM_BIN`, `LLVM_LIB`, and `LLVM_INCLUDE` because package-based LLVM distributions often split them across different directories, e.g.:
 
-This is one example output you will find in `llc-command.txt` after running the above commands:
+* `LLVM_BIN=/usr/bin`
+* `LLVM_LIB=/usr/lib/llvm-19/lib`
+* `LLVM_INCLUDE=/usr/include/llvm-19/llvm`
+
+Example output in `llc-command.txt`:
 
 ```bash
 $ cat llc-command.txt
 -mcpu=neoverse-n1 -mtriple=aarch64-unknown-linux-gnu -mattr="+fp-armv8,+lse,+neon,+crc,+crypto"
 ```
 
-You can feed this into `llc` for backend optimization.
+You can pass this string to `llc` to enable appropriate backend optimizations.
 
-#### 1.2 PAPI (hardware performance counters)
+---
 
-PAPI is used to collect hardware performance counters for the Nugget runs.
+### 1.2 PAPI (Hardware Performance Counters)
+
+PAPI is used to collect hardware performance counters in Nugget runs.
 
 ```bash
 cd [project dir]/nugget_util/hook_helper/other_tools/papi
@@ -184,35 +255,37 @@ For example:
 [project dir]/nugget_util/hook_helper/other_tools/papi/aarch64
 ```
 
-We refer to this directory as `[papi install prefix]` in the rest of the document.
+We refer to this directory as `[papi install prefix]`.
 
-#### 1.3 Test and generate event combinations
+---
+
+### 1.3 Test and Generate Event Combinations
 
 This step:
 
-* Tests the PAPI installation.
-* Computes combinations of events so that you can cover all supported events in a minimal number of runs, given a fixed number of hardware counters.
+* Verifies that PAPI is correctly installed.
+* Generates combinations of events so you can cover all supported events in a minimal number of runs, given a fixed number of hardware counters.
 
-We recommend setting `[# of events per run]` to the number of hardware counters on your machine.
+We recommend setting `[# of events per run]` equal to the number of hardware counters on your machine.
 
-You can get that information by running:
+You can get that by running:
 
 ```bash
-./[papi install prefix]/bin/papi_avail -a
+[papi install prefix]/bin/papi_avail -a
 ```
 
-Then run:
+Then:
 
 ```bash
 ./install-test-papi-combos.sh [papi install prefix]
 ./test_papi_combos [# of events per run] [papi install prefix]/bin/papi_avail
 ```
 
-> Note: `install-tset-papi-combos.sh` must be run from
+> Note: `install-test-papi-combos.sh` must be run from
 > `[project dir]/nugget_util/hook_helper/other_tools/papi`
 > so that relative paths work correctly.
 
-If it complains about a missing `libpfm.so.4`, install the required library:
+If you see an error about missing `libpfm.so.4`, install the required library:
 
 ```bash
 cd [project dir]/nugget_util/hook_helper/other_tools/papi/needed-lib
@@ -220,11 +293,11 @@ cd [project dir]/nugget_util/hook_helper/other_tools/papi/needed-lib
 export LD_LIBRARY_PATH=$PWD/libpfm/lib:$LD_LIBRARY_PATH
 ```
 
-You need to keep `LD_LIBRARY_PATH` set in any shell where you use this PAPI build.
+You must keep `LD_LIBRARY_PATH` set in any shell where you use this PAPI build.
 
-##### Example output
+#### Example Output
 
-Example:
+Example command:
 
 ```bash
 ./test_papi_combos 6 $PWD/aarch64/bin/papi_avail
@@ -248,40 +321,41 @@ Found a cover of size 5 (theoretical min 5):
  ['PAPI_L1_ICM', 'PAPI_TOT_CYC', 'PAPI_SYC_INS', 'PAPI_L1_ICH', 'PAPI_L1_ICA', 'PAPI_L2_TCA']]
 ```
 
-**What this program does**
+What `test_papi_combos` does:
 
-`test_papi_combos` takes:
+* Inputs:
 
-* `[# of events per run]`: the number of events per run (typically equal to the number of hardware counters).
-* `papi_avail`: the PAPI availability binary.
+  * `[# of events per run]`: number of events per run (typically equal to the number of hardware counters).
+  * `papi_avail`: the PAPI availability binary.
+* Workflow:
 
-It then:
-
-1. Enumerates the possible event combinations of size `[# of events per run]`.
-2. Finds which combinations are supported by the hardware.
-3. Computes a minimal set of combinations that jointly cover all supported events.
+  1. Enumerates possible event combinations of size `[# of events per run]`.
+  2. Filters to combinations supported by the hardware.
+  3. Finds a minimal set of combinations that covers all supported events.
 
 In the example above:
 
 * You need **5 runs** to cover all events.
-* Each run can measure **6 events**.
-* These combinations will be used later when collecting measurements.
+* Each run collects **6 events**.
+* These combinations are later used when collecting measurements.
 
-Note: For multi-threaded programs, we can reliably measure only the runtime; detailed per-event measurements are mainly meaningful for single-threaded executions.
+Note: For multi-threaded programs, we can reliably measure only overall runtime; detailed per-event measurements are mainly meaningful for single-threaded runs.
 
-#### 1.4 gem5 m5ops
+---
+
+### 1.4 gem5 m5ops
 
 This is required when running Nugget under gem5 (for invoking gem5-specific hooks via `m5` ops).
 
 ```bash
 cd [project dir]/nugget_util/hook_helper/other_tools/gem5
-ISAS="[the abis you want to install]" ./get-gem5-util.sh
+ISAS="[the ABIs you want to install]" ./get-gem5-util.sh
 ```
 
-More information about which ABIs m5ops supports can be found in the
-[gem5 documentation](https://github.com/gem5/gem5/blob/stable/util/m5/README.md#supported-abis).
+For supported ABIs, see the gem5 documentation:
+[https://github.com/gem5/gem5/blob/stable/util/m5/README.md#supported-abis](https://github.com/gem5/gem5/blob/stable/util/m5/README.md#supported-abis)
 
-The script will ask if you want to use a cross compiler for each ABI. Example:
+During the script run, you will be asked whether to use a cross compiler for each ABI. Example:
 
 ```bash
 ISAS="arm64 riscv" ./get-gem5-util.sh
@@ -296,22 +370,22 @@ Enter CROSS_COMPILE for riscv (leave blank for none): /usr/bin/riscv64-linux-gnu
 ...
 ```
 
-After the script finishes, the built m5ops libraries/binaries will be placed in per-ABI subdirectories:
+After the script finishes, the built m5ops libraries/binaries are placed in per-ABI subdirectories:
 
 ```text
 $ ls
 arm64  get-gem5-util.sh  include  README.md  riscv
 ```
 
-#### 1.5 Sniper sim_api
+---
 
-This builds the Sniper `sim_api` used by Nugget when running on the Sniper simulator.
+### 1.5 Sniper `sim_api`
+
+This builds the Sniper `sim_api` used by Nugget when running on the Sniper simulator:
 
 ```bash
 cd [project dir]/nugget_util/hook_helper/other_tools/sniper
 make
 ```
 
-### 2. LLVM IR files
-
-
+```
