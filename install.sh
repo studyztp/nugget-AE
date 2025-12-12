@@ -35,17 +35,19 @@ fi
 
 ARCH=$(uname -m)
 PAPI_INSTALL_PREFIX="${PROJECT_DIR}/nugget_util/hook_helper/other_tools/papi/${ARCH}"
-LD_LIBRARY_PATH=$PAPI_INSTALL_PREFIX/../needed-lib/libpfm/lib:$LD_LIBRARY_PATH
-cd $PAPI_INSTALL_PREFIX/..
+OTHER_LIB_PATH="${PROJECT_DIR}/nugget_util/hook_helper/other_tools/papi/needed-lib"
+LD_LIBRARY_PATH=$PAPI_INSTALL_PREFIX/../../needed-lib/libpfm/lib:$LD_LIBRARY_PATH
+cd $OTHER_LIB_PATH/..
 
 if [[ -d "$PAPI_INSTALL_PREFIX" ]]; then
     echo "PAPI install dir already exists at: $PAPI_INSTALL_PREFIX"
     echo "Skipping PAPI build and install."
 else
     echo "PAPI not found at $PAPI_INSTALL_PREFIX; building and installing..."
-    cd $PAPI_INSTALL_PREFIX/../needed-lib
+    cd $OTHER_LIB_PATH
     chmod +x install-pfm.sh
     ./install-pfm.sh
+    LD_LIBRARY_PATH=$OTHER_LIB_PATH/libpfm/lib:$LD_LIBRARY_PATH
     cd ..
     chmod +x get-papi.sh
     ./get-papi.sh
