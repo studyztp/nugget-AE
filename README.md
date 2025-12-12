@@ -110,6 +110,13 @@ Minimal example (uses defaults for size, benchmarks, etc.):
 python3 ae-scripts/sample_selection.py -d [project dir]
 ```
 
+If time is tight, we recommend using `--use-random-linear-projections` option because using the default PCA projection can take a long time for BBV with large dimensions.
+
+For example:
+```bash
+python3 ae-scripts/sample_selection.py -d [project dir] --use-random-linear-projections
+```
+
 Outputs are written under:
 
 ```text
@@ -129,7 +136,7 @@ python3 ae-scripts/nugget_creation_and_validaton.py \
     -s [input class] \
     -b "CG EP" \
     -t [threads] \
-    --grace-perc 0.98
+    --grace-perc [a percentage]
 ```
 
 What this script does:
