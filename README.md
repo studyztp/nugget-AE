@@ -6,6 +6,7 @@ This repository is the Artifact Evaluation (AE) workspace for **Nugget**. It con
 - Experiment pipelines for:
   - **NPB** (`nugget-protocol-NPB/`)
   - **LSMS** (`nugget-protocol-lsms/`)
+  - **gem5 simulation** (`gem5-simulation/`)
 
 We recommend the **Docker path** for the smoothest experience. Host installs are supported but more sensitive to system differences.
 

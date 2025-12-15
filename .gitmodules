@@ -10,3 +10,6 @@
 [submodule "nugget-protocol-lsms"]
 	path = nugget-protocol-lsms
 	url = https://github.com/darchr/nugget-protocol-lsms.git
+[submodule "gem5-simulation"]
+	path = gem5-simulation
+	url = https://github.com/studyztp/nugget-AE-gem5-simulation.git
