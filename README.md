@@ -1,5 +1,11 @@
 # Nugget Artifact Evaluation (AE)
 
+## Zenodo 
+
+DOI: https://doi.org/10.5281/zenodo.17934862
+
+## Intro
+
 This repository is the Artifact Evaluation (AE) workspace for **Nugget**. It contains:
 - Docker support for a controlled environment
 - Helper scripts to build dependencies (LLVM + Nugget passes, PAPI)
