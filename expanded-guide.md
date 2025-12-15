@@ -1,7 +1,6 @@
 # Nugget AE Tutorial Notes (Expanded Guide)
 
-This document is a **tutorial-style companion** to the main README.  
-Use it when you want more context, examples, and troubleshooting help.
+This document is a **tutorial-style companion** to the main README. Use it when you want more context, examples, and troubleshooting help.
 
 It covers:
 - What each AE step is doing (conceptually)
@@ -9,6 +8,8 @@ It covers:
 - Practical tips for performance measurement and PAPI quirks
 - How to detect supported CPU features for LLVM backends
 - How PAPI event combinations are generated and why they’re needed
+
+Architecture note: All scripts support selecting the target architecture via `-a/--architecture` (e.g., `x86_64`, `aarch64`). Where relevant, some scripts also distinguish the architecture used during sample selection via `--selection-architecture`.
 
 > Recommended reading order:
 > 1) Main README: follow the commands end-to-end once  
@@ -134,27 +135,30 @@ If those are missing, Step 2 will be operating on empty inputs.
 
 ## 2.1 NPB
 
+What it does:
+- Builds IR basic-block (BB) analysis binaries for the selected NPB benchmarks and size.
+- Runs them to generate `analysis-output.csv` and `basic-block-info.txt` per benchmark.
+
 By default, NPB runs:
 - input class **A**
 - **4 threads**
 
 This is not “the final experimental setup”; it’s a fast pipeline sanity check.
 
-Outputs land under:
+Outputs land under (per benchmark and size):
 
 ```text
-nugget-protocol-NPB/ae-experiments/analysis/<analysis_binary>/threads-<T>/
+nugget-protocol-NPB/ae-experiments/analysis/threads-<T>/<architecture>/<benchmark>_<size>/
 ````
 
 Example listing you might see:
 
 ```terminal
 $ ls nugget-protocol-NPB/ae-experiments/analysis
-ir_bb_analysis_exe_bt_A  ir_bb_analysis_exe_ep_A  ir_bb_analysis_exe_is_A  ir_bb_analysis_exe_mg_A
-ir_bb_analysis_exe_cg_A  ir_bb_analysis_exe_ft_A  ir_bb_analysis_exe_lu_A  ir_bb_analysis_exe_sp_A
+threads-4
 
-$ ls nugget-protocol-NPB/ae-experiments/analysis/ir_bb_analysis_exe_bt_A/threads-4
-execution_time.txt  stderr.log  stdout.log  analysis-output.csv
+$ ls nugget-protocol-NPB/ae-experiments/analysis/threads-4/x86_64/bt_A
+analysis-output.csv  basic-block-info.txt  execution_time.txt  stderr.log  stdout.log
 ```
 
 Sanity check:
@@ -162,22 +166,64 @@ Sanity check:
 * `analysis-output.csv` exists and is non-empty
 * `stderr.log` does not contain a crash traceback
 
+Help (from `--help`):
+
+```text
+usage: preparation_and_interval_analysis.py [-h] [--project_dir PROJECT_DIR] [--size SIZE]
+                                            [--num-threads NUM_THREADS] [--benchmarks BENCHMARKS ...]
+                                            [--architecture ARCHITECTURE]
+
+Build and run NPB IR BB analysis binaries.
+
+options:
+  -h, --help            show this help message and exit
+  --project_dir -d      Path to project root containing nugget-protocol-NPB
+  --size -s             The input class of NPB (default: A)
+  --num-threads -t      The number of threads used for the experiments. (default: 4)
+  --benchmarks -b       List of benchmarks to run. Defaults to all NPB benchmarks.
+  --architecture -a     Target architecture for building the binaries. (Default: host architecture)
+```
+
 ---
 
 ## 2.2 LSMS
 
+What it does:
+- Builds LSMS IR BB analysis binaries.
+- Runs a single-process analysis to generate `analysis-output.csv` and `basic-block-info.txt` for the selected input.
+
 LSMS is single-threaded.
 
-Outputs are typically under:
+Outputs are under:
 
 ```text
-nugget-protocol-lsms/ae-experiments/<input-command>/
+nugget-protocol-lsms/ae-experiments/analysis/<input-command>/<architecture>/
 ```
 
 Sanity check:
 
 * Look for the same “shape” of outputs as NPB (CSV/log/runtime text)
 * Confirm the run didn’t silently exit early
+
+Help (from `--help`):
+
+```text
+usage: preparation_and_interval_analysis.py [-h] [--project-dir PROJECT_DIR]
+                                            [--input-directory INPUT_DIRECTORY]
+                                            [--input-command INPUT_COMMAND]
+                                            [--region-length REGION_LENGTH]
+                                            [--architecture ARCHITECTURE]
+
+Build and run LSMS IR BB analysis binaries.
+
+options:
+  -h, --help            show this help message and exit
+  --project-dir -d      Path to project root containing nugget-protocol-NPB
+  --input-directory -r  Relative path to input directory from project root. (default: 'ae-scripts/input')
+  --input-command -c    Input command to run LSMS. (default: 'i_lsms')
+  --region-length -l    Region length for basic block profiling. (default: 100000000)
+  --architecture -a     Target architecture for the build (default: detected architecture)
+```
 
 ---
 
@@ -220,8 +266,12 @@ python3 ae-scripts/sample_selection.py -d <PROJECT_DIR> --use-random-linear-proj
 Expected output directories:
 
 ```text
-nugget-protocol-NPB/ae-experiments/create-markers/
-nugget-protocol-NPB/ae-experiments/sample-selection/
+# Sample selection (per benchmark-size)
+nugget-protocol-NPB/ae-experiments/sample-selection/threads-<T>/<architecture>/k-means/<benchmark>_<size>/
+nugget-protocol-NPB/ae-experiments/sample-selection/threads-<T>/<architecture>/random/<benchmark>_<size>/
+
+# Marker input files (k-means + random combined)
+nugget-protocol-NPB/ae-experiments/create-markers/threads-<T>/<grace-perc>/<architecture>/<benchmark>_<size>/input-files/
 ```
 
 Sanity check:
@@ -229,6 +279,38 @@ Sanity check:
 * Marker files exist
 * k-means and random selections exist
 * Logs do not show errors
+
+Help (from `--help`):
+
+```text
+usage: sample_selection.py [-h] --project_dir PROJECT_DIR [--size SIZE]
+                           [--threads THREADS] [--num-regions NUM_REGIONS]
+                           [--random-seed RANDOM_SEED] [--grace-perc GRACE_PERC]
+                           [--region-length REGION_LENGTH]
+                           [--num-warmup-region NUM_WARMUP_REGION]
+                           [--benchmarks BENCHMARKS ...]
+                           [--num-projections NUM_PROJECTIONS]
+                           [--use-random-linear-projections]
+                           [--architecture ARCHITECTURE]
+
+Run sample selection and marker creation.
+
+options:
+  -h, --help            show this help message and exit
+  --project_dir -d      Path to project root containing nugget-protocol-NPB (required)
+  --size -s             Input class used for the analyses (default: A)
+  --threads -t          Thread count used in the analysis runs (default: 4)
+  --num-regions -n      Number of k nuggets for clustering (default: 30)
+  --random-seed         Seed for random region selection (default: 627)
+  --grace-perc          Grace percentage for marker creation (default: 0.98)
+  --region-length       Region length for marker creation (default: 400000000)
+  --num-warmup-region   Number of warmup regions for marker creation (default: 1)
+  --benchmarks -b       List of NPB benchmarks to process (default: all)
+  --num-projections -p  Number of projections for K-means clustering (default: 100)
+  --use-random-linear-projections
+                        Use random linear projections for K-means clustering
+  --architecture -a     Target architecture for the analysis binaries (default: host)
+```
 
 ---
 
@@ -239,8 +321,41 @@ The step is analogous to NPB but uses LSMS paths/scripts.
 Expected output directories:
 
 ```text
-nugget-protocol-lsms/ae-experiments/create-markers/
-nugget-protocol-lsms/ae-experiments/sample-selection/
+# K-means + random selection outputs for the chosen analysis dir
+nugget-protocol-lsms/ae-experiments/sample-selection/k-means/<analysis-dir>/<architecture>/
+nugget-protocol-lsms/ae-experiments/sample-selection/random/<analysis-dir>/<architecture>/
+
+# Marker input files
+nugget-protocol-lsms/ae-experiments/create-markers/<grace-perc>/<analysis-dir>/<architecture>/input-files/
+```
+
+Help (from `--help`):
+
+```text
+usage: sample_selection.py [-h] --project-dir PROJECT_DIR [--num-regions NUM_REGIONS]
+                           [--random-seed RANDOM_SEED] [--grace-perc GRACE_PERC]
+                           [--region-length REGION_LENGTH]
+                           [--num-warmup-region NUM_WARMUP_REGION]
+                           [--num-projections NUM_PROJECTIONS]
+                           [--use-random-linear-projections]
+                           [--analysis-dir ANALYSIS_DIR]
+                           [--architecture ARCHITECTURE]
+
+Run sample selection and marker creation.
+
+options:
+  -h, --help            show this help message and exit
+  --project-dir -d      Path to project root containing nugget-protocol-lsms (required)
+  --num-regions -n      Number of k nuggets for clustering (default: 30)
+  --random-seed         Seed for random region selection (default: 627)
+  --grace-perc          Grace percentage for marker creation (default: 0.98)
+  --region-length       Region length for marker creation (default: 100000000)
+  --num-warmup-region   Number of warmup regions for marker creation (default: 1)
+  --num-projections -p  Number of projections for K-means clustering (default: 100)
+  --use-random-linear-projections
+                        Use random linear projections for K-means clustering
+  --analysis-dir -r     Directory name under analysis results to use (default: i_lsms)
+  --architecture -a     Architecture string used in binary names (default: host)
 ```
 
 ---
@@ -265,14 +380,37 @@ python3 ae-scripts/nugget_creation_and_validaton.py \
 Outputs:
 
 ```text
-nugget-protocol-NPB/ae-experiments/nugget-measurement/measurements.csv
-nugget-protocol-NPB/ae-experiments/nugget-measurement/prediction-error.csv
+nugget-protocol-NPB/ae-experiments/nugget-measurement/threads-<T>/<size>/<architecture>/measurements.csv
+nugget-protocol-NPB/ae-experiments/nugget-measurement/threads-<T>/<size>/<architecture>/prediction-error.csv
 ```
 
 Sanity check:
 
 * `measurements.csv` has rows for naive and nugget runs
 * `prediction-error.csv` is generated and non-empty
+
+Help (from `--help`):
+
+```text
+usage: nugget_creation_and_validaton.py [-h] --project_dir PROJECT_DIR [--size SIZE]
+                                        [--benchmarks BENCHMARKS] [--threads THREADS]
+                                        [--grace-perc GRACE_PERC]
+                                        [--architecture ARCHITECTURE]
+                                        [--selection-architecture SELECTION_ARCHITECTURE]
+
+Create and validate nuggets/naive binaries and measure runtime.
+
+options:
+  -h, --help            show this help message and exit
+  --project_dir -d      Path to project root containing nugget-protocol-NPB (required)
+  --size -s             Input size/class (e.g., A/B/C) (default: A)
+  --benchmarks -b       Benchmarks to target, space/comma/semicolon separated (default: all)
+  --threads -t          Number of threads for runs (default: 4)
+  --grace-perc          Grace percentage used in markers (default: 0.98)
+  --architecture -a     Target architecture for the analysis binaries (default: host)
+  --selection-architecture
+                        Architecture used during sample selection (default: host)
+```
 
 ---
 
@@ -313,8 +451,36 @@ python3 ae-script/nugget_creation_and_validaton.py \
 Outputs:
 
 ```text
-nugget-protocol-lsms/ae-experiments/nugget-measurement/measurements.csv
-nugget-protocol-lsms/ae-experiments/nugget-measurement/prediction-error.csv
+nugget-protocol-lsms/ae-experiments/nugget-measurement/<input-command>/<architecture>/measurements.csv
+nugget-protocol-lsms/ae-experiments/nugget-measurement/<input-command>/<architecture>/prediction-error.csv
+```
+
+Help (from `--help`):
+
+```text
+usage: nugget_creation_and_validaton.py [-h] --project_dir PROJECT_DIR
+                                        [--grace-perc GRACE_PERC]
+                                        [--input-command INPUT_COMMAND]
+                                        [--input-directory INPUT_DIRECTORY]
+                                        --papi-combo-file-path PAPI_COMBO_FILE_PATH
+                                        [--skip-build]
+                                        [--architecture ARCHITECTURE]
+                                        [--selection-architecture SELECTION_ARCHITECTURE]
+
+Create and validate nuggets/naive binaries and measure runtime (LSMS + PAPI).
+
+options:
+  -h, --help            show this help message and exit
+  --project_dir -d      Path to project root containing nugget-protocol-lsms (required)
+  --grace-perc          Grace percentage used in markers (default: 0.98)
+  --input-command -c    Input command to run LSMS (default: i_lsms)
+  --input-directory -r  Relative path to input directory from project root (default: ae-scripts/input)
+  --papi-combo-file-path -p
+                        Path to papi event combination coverage file (required)
+  --skip-build          Skip the build step if set
+  --architecture -a     Target architecture for the build (default: host)
+  --selection-architecture -s
+                        Architecture used during sample selection (default: host)
 ```
 
 ---
