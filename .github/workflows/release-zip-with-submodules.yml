@@ -1,0 +1,43 @@
+name: Release zip (with submodules)
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  zip-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules, recursive)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Ensure submodules are initialized
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Create zip (excluding git metadata)
+        run: |
+          REPO="${GITHUB_REPOSITORY#*/}"
+          TAG="${GITHUB_REF_NAME}"
+          OUT="${REPO}-${TAG}.zip"
+
+          zip -r "$OUT" . \
+            -x ".git/*" ".git/**" \
+               "**/.git/*" "**/.git/**" \
+               "**/.git"
+
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release + upload zip
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.OUT }}
