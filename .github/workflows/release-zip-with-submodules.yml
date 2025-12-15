@@ -13,28 +13,38 @@ jobs:
   zip-release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (with submodules, recursive)
+      - name: Checkout (recursive submodules)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
+          lfs: true   # safe even if you don't use LFS
 
-      - name: Ensure submodules are initialized
+      - name: Debug: confirm submodules are populated
         run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive
+          git submodule status --recursive
+          echo "Top-level tree:"
+          ls -la
+          echo "Submodule trees:"
+          git submodule foreach --recursive 'echo "== $name =="; ls -la | head -n 50'
 
-      - name: Create zip (excluding git metadata)
+      - name: Stage a clean folder and zip it
         run: |
           REPO="${GITHUB_REPOSITORY#*/}"
           TAG="${GITHUB_REF_NAME}"
-          OUT="${REPO}-${TAG}.zip"
+          STAGE="${REPO}-${TAG}"
+          OUT="${STAGE}.zip"
 
-          zip -r "$OUT" . \
-            -x ".git/*" ".git/**" \
-               "**/.git/*" "**/.git/**" \
-               "**/.git"
+          mkdir -p "$STAGE"
+          rsync -a --delete \
+            --exclude ".git" \
+            --exclude ".github/workflows" \
+            --exclude ".gitmodules" \
+            --exclude "**/.git" \
+            --exclude "**/.git/**" \
+            ./ "$STAGE/"
 
+          zip -r "$OUT" "$STAGE"
           echo "OUT=$OUT" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release + upload zip
