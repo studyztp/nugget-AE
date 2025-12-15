@@ -36,6 +36,8 @@ run: image
 	@echo "Starting container from $(IMAGE) with $(WORKDIR) mounted to /workdir..."
 	@echo "NUM_CORES_TO_USE=$(NUM_CORES_TO_USE)"
 	docker run --rm -it \
+		--cap-add=PERFMON --cap-add=SYS_ADMIN --cap-add=SYS_PTRACE \
+		--security-opt seccomp=unconfined \
 		-e NUM_CORES_TO_USE=$(NUM_CORES_TO_USE) \
 		-v $(WORKDIR):/workdir \
 		$(IMAGE)

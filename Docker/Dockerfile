@@ -14,13 +14,28 @@ RUN groupadd -g ${GID} ${USERNAME} \
 RUN mkdir -p /workdir \
     && chown ${UID}:${GID} /workdir
 
-# Update and install libs
-RUN apt-get update && apt-get install -y libncurses-dev python3-venv python3-pybind11 pybind11-dev gdb && rm -rf /var/lib/apt/lists/*
-RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir pandas scikit-learn pybind11 wheel setuptools pip
-ENV PATH="/opt/venv/bin:${PATH}"
+# Update and install libs (including HDF5, BLAS/LAPACK, MPI, OpenMP)
+RUN apt-get update && apt-get install -y \
+    libncurses-dev \
+    libreadline-dev \
+    python3-venv \
+    python3-pybind11 \
+    pybind11-dev \
+    gdb \
+    libhdf5-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    openmpi-bin \
+    libopenmpi-dev \
+    libomp-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps
-RUN pip3 install --no-cache-dir pandas
+# Python venv + deps
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir -U pip setuptools wheel \
+    && /opt/venv/bin/pip install --no-cache-dir pandas scikit-learn pybind11
+
+ENV PATH="/opt/venv/bin:${PATH}"
 
 # Set working directory (this is where you'll mount your host dir)
 WORKDIR /workdir
