@@ -314,7 +314,93 @@ nugget-protocol-lsms/ae-experiments/nugget-measurement/<input-command>/<architec
 
 ---
 
-## 4) gem5 simulation (optional because it will take a long time)
+## 4) Understanding the data
+
+### 4.1 Measurements
+
+The `measurements.csv` file contains detailed runtime measurements for:
+- **Naive baseline**: Full program execution (type = `naive`)
+- **Nugget samples**: Individual region executions (type = `nugget`)
+
+Key columns:
+- `benchmark`, `size`, `threads`: Test configuration
+- `type`: `naive` (full program) or `nugget` (sampled region)
+- `region_id`: Identifier for the sampled region (empty for naive)
+- `cluster_id`: K-means cluster assignment (empty for random samples)
+- `runtime_nseconds`: Measured execution time in nanoseconds
+- `baseline_naive_nseconds`: Reference baseline for comparison
+
+### 4.2 Prediction error
+
+The `prediction-error.csv` file shows prediction accuracy for both sampling methods:
+- **k-means**: Cluster-based weighted prediction
+- **random**: Uniform random sampling prediction
+
+Prediction error is calculated as:
+
+$$\text{Prediction Error (\%)} = \frac{T_{\text{predicted}} - T_{\text{naive}}}{T_{\text{naive}}} \times 100$$
+
+Where:
+- $T_{\text{predicted}}$ = weighted sum of nugget runtimes
+- $T_{\text{naive}}$ = full program baseline runtime
+
+Positive errors indicate over-prediction; negative errors indicate under-prediction.
+
+### 4.3 Plot
+
+#### 4.3.1 NPB
+
+We provide two plotting scripts to visualize results similar to the paper figures.
+
+**Plot analysis overhead:**
+
+```bash
+cd nugget-protocol-NPB
+python3 ae-scripts/plot_overhead.py \
+  <analysis_folder> \
+  <measurements.csv>
+```
+
+This plots the overhead of IR basic-block analysis compared to naive execution (analysis time / baseline time).
+
+Example:
+
+```bash
+cd nugget-protocol-NPB
+python3 ae-scripts/plot_overhead.py \
+  ae-experiments/analysis/threads-4/aarch64 \
+  ae-experiments/nugget-measurement/threads-4/A/aarch64/measurements.csv
+```
+
+![Example Overhead Figure](images/overhead_plot.png)
+
+**Plot prediction errors:**
+
+```bash
+cd nugget-protocol-NPB
+python3 ae-scripts/plot.py <prediction-error.csv>
+```
+
+This creates a grouped bar chart comparing k-means vs. random sampling accuracy per benchmark.
+
+Example:
+
+```bash
+cd nugget-protocol-NPB
+python3 ae-scripts/plot.py \
+  ae-experiments/nugget-measurement/threads-4/A/aarch64/prediction-error.csv
+```
+
+![Example Prediction Error Figure](images/prediction_error_plot.png)
+
+**Options for both scripts:**
+- `--output <path>` or `-o <path>`: Save to custom filename (default: `overhead_plot.png` or `prediction_error_plot.png`)
+- `--show`: Display plot in window instead of saving to file
+
+
+---
+
+## 5) gem5 simulation (optional)
 
 See the detailed gem5 instructions in [gem5-simulation/README>.md](gem5-simulation/README.md).
 
